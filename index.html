@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ReactES6-音乐播放器</title>
+<link rel="stylesheet" type="text/css" href="css/reset.css">
+<link rel="stylesheet" type="text/css" href="css/common.css">
+<link rel="stylesheet" type="text/css" href="css/index.css">
+<script src="js/react.min.js"></script>
+<script src="js/react-dom.min.js"></script>
+<script src="js/react-router-dom.js"></script>
+<script src="js/browser.min.js"></script>
+
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jplayer/2.9.2/jplayer/jquery.jplayer.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<div id="player"></div>
+<script src="js/musicList.js"></script>
+<script type="text/babel">
+//React编程思想：数据驱动VS事件驱动
+let duration=null;
+//设置路由
+const {BrowserRouter, Route, Link}  = ReactRouterDOM;
+class Parent extends React.Component{
+	constructor(...args){
+		super(...args);
+		this.state={
+			playmethod:"cycle",
+			musicList:MUSIC_LIST,
+			currentMusicItem:MUSIC_LIST[0]
+		}
+	}
+	playmusic(musicItem){
+		$("#player").jPlayer('setMedia',{
+            mp3:musicItem.file
+        }).jPlayer('play');
+        this.setState({
+            currentMusicItem:musicItem
+        })
+	}
+	playnext(nIndex){
+		switch(this.state.playmethod){
+			case "cycle" :
+				nIndex=this.state.currentMusicItem.id;
+			break;
+			case "random":
+				nIndex=Math.ceil(Math.random(10)*6);
+			break;
+			case "once":
+				nIndex=this.state.currentMusicItem.id;
+			break;
+		}
+		if(nIndex>this.state.musicList.length-1){
+			nIndex=0
+		}
+		this.playmusic(this.state.musicList[nIndex])
+	}
+	playprev(nIndex){
+		
+		if(nIndex<0){
+			nIndex=this.state.musicList.length-1
+		}
+		this.playmusic(this.state.musicList[nIndex])
+	}
+	
+	playmethod(nVal){
+		console.log(nVal);
+		this.setState({
+            playmethod:nVal
+       });
+	}
+	playorder(nVal){
+		
+	}
+	componentWillMount(){
+		
+		var nIndex=null;
+		var This=this;
+		$("#player").jPlayer({
+			supplied:'mp3',
+			vmode:'window'
+		}); 
+		//开始播放
+		this.playmusic(this.state.currentMusicItem);
+		switch(this.state.playmethod){
+			case "cycle" :
+				nIndex=this.state.currentMusicItem.id;
+			break;
+			case "random":
+				nIndex=Math.ceil(Math.random(10)*6);
+			break;
+			case "once":
+				this.playmusic(this.state.currentMusicItem);
+			break;
+		}
+		
+		//循环播放
+		$("#player").bind($.jPlayer.event.ended,function(){
+		  switch(This.state.playmethod){
+				case "cycle" :
+					nIndex=This.state.currentMusicItem.id;
+					 This.playnext(nIndex);
+				break;
+				case "random":
+					nIndex=Math.ceil(Math.random(10)*6);
+					 This.playnext(nIndex);
+				break;
+				case "once":
+					This.playmusic(This.state.currentMusicItem);
+				break;
+			}
+          
+        })
+	}
+	componentWillUnMount(){
+		$("#player").unbind($.jPlayer.event.ended)
+	}
+
+	deleteMusicList(iNow){
+		var arr=this.state.musicList;
+		arr.splice(iNow,1);
+		this.setState({
+			musicList:arr
+		})
+	}
+	render(){
+		var This=this;
+		return(
+			<div>
+				<Header />
+	
+				<BrowserRouter  basename="/"  keyLength={12}>
+					<div>
+				      <Link to="/list">音乐列表</Link>
+				      <Route exact path="/list"  render={() =><MusicList  onplaymusic={this.playmusic.bind(this)} ondeleteMusicList={this.deleteMusicList.bind(this)} currentMusicItem={this.state.currentMusicItem} musicList={this.state.musicList}></MusicList>}/>
+				      
+				    </div>
+		 		 </BrowserRouter>
+				<Player onplaymethod={this.playmethod.bind(this)} onplayprev={this.playprev.bind(this)} onplaynext={this.playnext.bind(this)} currentMusicItem={this.state.currentMusicItem}></Player>
+				
+			</div>
+		)
+	}
+}
+//无状态组件——Header组件
+function Header(props){
+    return(
+        <div className="components-header row">
+	        <img src="images/logo.png" width="40" alt="" className="-col-auto"/>
+	        <h1 className="caption">React 音乐播放器</h1>
+	    </div>
+	)
+}
+//进度条组件——Progress
+class Progress extends React.Component{
+	constructor(...args){
+		super(...args);
+	}
+	changeProgress(e){
+        let progressBar=this.refs.progressBar;
+        let progress=(e.clientX-progressBar.getBoundingClientRect().left)/progressBar.clientWidth;
+        this.props.onProgressChange && this.props.onProgressChange(progress);
+    }
+	render(){
+		return(
+			<div className="components-progress"   ref="progressBar"  onClick={this.changeProgress.bind(this)}>
+                <div className="progress" style={{width:`${this.props.progress}%`,background:this.props.barColor}}></div>
+            </div>
+		)
+	}
+}
+//播放组件——Player
+class Player extends React.Component{
+	constructor(...args){
+		super(...args);
+		this.state={
+			progress:"-",
+			volume:0,
+			timer:0,
+			lengthTime:0,
+            isPlay:true
+		}
+	}
+	componentWillMount(){
+		$("#player").bind($.jPlayer.event.timeupdate,(e)=>{
+			duration=e.jPlayer.status.duration;//获取音乐总时长
+			this.setState({
+				progress:e.jPlayer.status.currentPercentAbsolute,
+				volume:e.jPlayer.options.volume * 100,
+				timer:this.minute(parseInt(e.jPlayer.status.currentTime)),
+				lengthTime:this.minute(parseInt(e.jPlayer.status.duration))
+			});
+		});
+	}
+	//秒数转换成分表市中
+	minute(s){
+		let min=Math.floor((s/60)%60);
+		let sec=s%60;
+		if(min<10){
+			min="0"+min;
+		}
+		if(sec<10){
+			sec="0"+sec;	
+		}
+		return min+":"+sec
+	}
+	componentWillUnMount(){
+		$("#player").bind($.jPlayer.event.timeupdate);
+	}
+	progressChangeHandler(progress){
+		$("#player").jPlayer('play',duration*progress);
+	}
+	changeVolumeHandler(progress) {
+        $("#player").jPlayer("volume", progress);
+    }
+	play() {
+        if (this.state.isPlay) {
+            $("#player").jPlayer("pause");
+        } else {
+            $("#player").jPlayer("play");
+        }
+        this.setState({
+            isPlay: !this.state.isPlay
+        });
+    }
+	playNext(){
+		let nIndex=this.props.currentMusicItem.id;
+		this.props.onplaynext(nIndex);
+	}
+	playPrev(){
+		let nIndex=this.props.currentMusicItem.id-2;
+		this.props.onplayprev(nIndex);
+	}
+	playMethod(){
+		let obj=this.refs.playmethod;
+		let nVal=null;
+		let className=null;
+		if(obj.className.indexOf("repeat-random")>-1){
+			className="icon repeat-once";
+			nVal="once";
+		}else if(obj.className.indexOf("repeat-once")>-1){
+			className="icon repeat-cycle";
+			nVal="cycle";
+		}else if(obj.className.indexOf("repeat-cycle")>-1){
+			className="icon repeat-random";
+			nVal="random";
+		}
+		obj.className=className;
+		this.props.onplaymethod(nVal);
+	}
+	render(){
+		return(
+			<div className="player-page">
+	            <h1 className="caption">我的私人音乐坊 &gt;</h1>
+	            <div className="mt20 row">
+		            <div className="controll-wrapper">
+			            <h2 className="music-title">{this.props.currentMusicItem.title}</h2>
+			            <h3 className="music-artist mt10">{this.props.currentMusicItem.artist}</h3>
+			            <div className="row mt20">
+			                <div className="left-time -col-auto">{this.state.timer} / {this.state.lengthTime}</div>
+			           		<div className="volume-container">
+			                	<i className="icon-volume rt" style={{top: 5, left: -5}}></i>
+				                <div className="volume-wrapper">
+									<Progress
+				                        progress={this.state.volume}
+				                        onProgressChange={this.changeVolumeHandler.bind(this)}
+				                        barColor='#aaa'
+				                    >
+				                    </Progress>
+				                </div>
+			                </div>
+			            </div>
+		                <div style={{height: 10, lineHeight: '10px',marginTop:"10px"}}>
+		                        <Progress barColor="#F00"  progress={this.state.progress} onProgressChange={this.progressChangeHandler.bind(this)}></Progress>
+		                </div>
+			            <div className="mt35 row">
+			                <div>
+				                <i className="icon prev" onClick={this.playPrev.bind(this)}></i>
+				                <i className={`icon ml20 ${this.state.isPlay ? 'pause' : 'play'}`} onClick={this.play.bind(this)}></i>
+				                <i className="icon next ml20" onClick={this.playNext.bind(this)}></i>
+			                </div>
+			            	<div className="-col-auto"><i ref="playmethod" onClick={this.playMethod.bind(this)} className="icon repeat-cycle"></i></div>
+			            </div>
+		            </div>
+		            <div className="-col-auto cover">
+		                <img  src={this.props.currentMusicItem.cover} alt={this.props.currentMusicItem.title} />
+		            </div>
+	            </div>
+	        </div>
+		)
+	}
+}
+//音乐列表组件——MusicList
+class MusicList extends React.Component{
+	constructor(...args){
+		super(...args);
+	}
+	sigmal(nVal){
+		this.props.ondeleteMusicList(nVal);	
+	}
+	playmusicindexlist(musicItem){
+		this.props.onplaymusic(musicItem);
+	}
+	playnextlist(index){
+		this.props.playnext(index);
+	}
+	render(){
+        let listEle=this.props.musicList.map((item)=>{
+            return (
+                <MusicListItem onplaynextlist={this.playnextlist.bind(this)} onplaymusicindexlist={this.playmusicindexlist.bind(this)}   onsignal={this.sigmal.bind(this)}  key={item.id} musicItem={item} focus={item === this.props.currentMusicItem}>{item.title}</MusicListItem>
+            );
+        });
+        return(
+            <ul>{listEle}</ul>
+        )
+    }
+	
+}
+
+class MusicListItem extends React.Component{
+	constructor(...args){
+		super(...args);
+	}
+	layMusic(musicItem){
+        Pubsub.publish("PLAY_MUSIC",musicItem);
+    }
+	playMusic(musicItem){
+		this.props.onplaymusicindexlist(musicItem);
+	}
+    deleteMusic(musicItem,e){
+        e.stopPropagation();
+        let index=musicItem.id-1;
+        this.props.onsignal(index);  
+    }
+	render(){
+		let musicItem=this.props.musicItem;
+        return(
+           <li onClick={this.playMusic.bind(this,musicItem)} className={`components-musiclistitem row${this.props.focus ? ' focus' : ''}`} >
+                <p><strong>{musicItem.title}</strong> - {musicItem.artist}</p>
+                <p  className="-col-auto delete" onClick={this.deleteMusic.bind(this,musicItem)} ></p>
+           </li>
+        )
+	}
+}
+ReactDOM.render(
+	<Parent />,
+	document.getElementById("root")
+)
+</script>
+</body>
+</html>
